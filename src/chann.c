@@ -39,11 +39,11 @@ chan_collection_init (chan_collection_t *c, size_t sz)
   if (c->channs == NULL)
     {
       retval = -1;
-      goto end;
     }
   c->sz = sz;
 
   retval = 0;
+
 end:
   return retval;
 }
@@ -73,7 +73,7 @@ chan_collection_find_by_sockfd (chan_collection_t *c, int sockfd)
 
   chan = NULL;
 
-  for (i = 0; i < c->sz; ++i)
+  for (i = 0; i < c->sz; i++)
     {
       if (c->channs[i] != 0 && c->channs[i]->conn.sockfd == sockfd)
         {

@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
@@ -15,12 +16,14 @@
 #include "chann.h"
 #include "jiffy.h"
 
-#define BAT_MAX_EVENTS 100
+#define BAT_MAX_FILE_NAME 255
+#define BAT_CONNECTION_STATE_TERMINATE 100
+#define BAT_MAX_EVENTS 1000
 
 pthread_mutex_t mut;
 
-#define bat_lock() pthread_mutex_lock (&mut);
-#define bat_unlock() pthread_mutex_unlock (&mut);
+#define bat_lock() pthread_mutex_lock (&mut)
+#define bat_unlock() pthread_mutex_unlock (&mut)
 
 chan_connection_t serverconn;
 chan_collection_t clientchans;
@@ -56,7 +59,7 @@ bat_routine_read (void *arg)
   chan_channel_t *chan;
   int rc;
   int state;
-  bool quit;
+  bool quit = false;
 
   chan = (chan_channel_t *)arg;
 
@@ -140,7 +143,7 @@ main (int argc, char *argv[])
   if (rv == -1)
     {
       perror ("bind() failed");
-      retval = EXIT_FAILURE;
+      retval = -1;
       goto cleanup;
     }
   rv = listen (serverconn.sockfd, 50);
@@ -148,7 +151,7 @@ main (int argc, char *argv[])
   if (rv == -1)
     {
       perror ("listen() failed");
-      retval = EXIT_FAILURE;
+      retval = -1;
       goto cleanup;
     }
   retval = EXIT_SUCCESS;
@@ -161,8 +164,7 @@ main (int argc, char *argv[])
 
   if (epollfd == -1)
     {
-      perror ("epoll_create1() failed");
-      retval = EXIT_FAILURE;
+      perror ("epoll_create1");
       goto cleanup;
     }
   ev.events = EPOLLIN;
@@ -172,7 +174,6 @@ main (int argc, char *argv[])
   if (rv == -1)
     {
       perror ("epoll_ctl() failed");
-      retval = EXIT_FAILURE;
       goto cleanup;
     }
 
@@ -182,8 +183,7 @@ main (int argc, char *argv[])
 
       if (nfds == -1)
         {
-          perror ("epoll_wait() failed");
-          retval = EXIT_FAILURE;
+          perror ("epoll_wait");
           goto cleanup;
         }
 
@@ -196,21 +196,18 @@ main (int argc, char *argv[])
 
               if (cfd == -1)
                 {
-
                   perror ("accept() failed");
                   continue;
                 }
-              printf ("accepted() = %d\n", cfd);
+              printf ("accepted() = %d", cfd);
               fcntl (cfd, F_SETFL, O_NONBLOCK);
               ev.events = EPOLLIN | EPOLLET;
               ev.data.fd = cfd;
-              rv = epoll_ctl (epollfd, EPOLL_CTL_ADD, cfd, &ev);
 
-              if (rv == -1)
+              if (epoll_ctl (epollfd, EPOLL_CTL_ADD, cfd, &ev) == -1)
                 {
-                  perror ("epoll_wait() failed");
-                  retval = EXIT_FAILURE;
-                  goto cleanup;
+                  perror ("epoll_ctl() failed");
+                  exit (EXIT_FAILURE);
                 }
               newchan = chan_create ();
               chan_init (newchan);
@@ -219,13 +216,11 @@ main (int argc, char *argv[])
               newchan->conn.sockfd = cfd;
               bat_lock ();
               rv = chan_collection_add (&clientchans, newchan);
-
               if (rv != -1)
                 {
                   newchan->key = rv;
                 }
               bat_unlock ();
-
               if (rv == -1)
                 {
                   perror ("chan_collection_add() failed");
@@ -255,6 +250,7 @@ main (int argc, char *argv[])
             }
         }
     }
+
 cleanup:
   jiff_deactivate (&readpool);
   jiff_notify (&readpool);

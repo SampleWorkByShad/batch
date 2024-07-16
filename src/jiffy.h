@@ -35,7 +35,7 @@ typedef struct
 
 int jiff_init (jiff_pool_t *, size_t, size_t, void *(void *));
 
-void *jiff_routine (void *);
+void *jif_routine (void *);
 
 void jiff_activate (jiff_pool_t *);
 

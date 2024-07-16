@@ -25,7 +25,7 @@ end:
 }
 
 void *
-jiff_routine (void *arg)
+jif_routine (void *arg)
 {
   jiff_meta_t *meta;
   void *item;
@@ -41,14 +41,16 @@ jiff_routine (void *arg)
   pthread_mutex_lock (&meta->pool->mut);
   while (meta->pool->active)
     {
-      for (i = 0; i < meta->pool->qsz; ++i)
+      for (i = 0; i < meta->pool->qsz; i++)
         {
           if (meta->pool->q[i] != 0)
             {
               item = meta->pool->q[i];
               meta->pool->q[i] = 0;
               pthread_mutex_unlock (&meta->pool->mut);
+
               meta->pool->routine (item);
+
               pthread_mutex_lock (&meta->pool->mut);
             }
         }
@@ -67,7 +69,7 @@ jiff_activate (jiff_pool_t *pool)
 
   pool->active = true;
 
-  for (i = 0; i < pool->sz; ++i)
+  for (i = 0; i < pool->sz; i++)
     {
       arg = (jiff_meta_t *)malloc (sizeof (*arg));
 
@@ -78,7 +80,7 @@ jiff_activate (jiff_pool_t *pool)
 
       pool->counter++;
 
-      pthread_create (&pool->keys[i].id, NULL, &jiff_routine, arg);
+      pthread_create (&pool->keys[i].id, NULL, &jif_routine, arg);
     }
 }
 
@@ -86,10 +88,7 @@ void
 jiff_deactivate (jiff_pool_t *pool)
 {
   pthread_mutex_lock (&pool->mut);
-  while (pool->counter > 0)
-    {
-      pthread_cond_wait (&pool->readycond, &pool->mut);
-    }
+  pool->active = false;
   pthread_mutex_unlock (&pool->mut);
 }
 
@@ -113,7 +112,7 @@ jiff_queue_add (jiff_pool_t *pool, void *item)
   index = -1;
 
   pthread_mutex_lock (&pool->mut);
-  for (i = 0; i < pool->qsz; ++i)
+  for (i = 0; i < pool->qsz; i++)
     {
       if (pool->q[i] == 0)
         {
@@ -139,7 +138,7 @@ jiff_winddown (jiff_pool_t *pool)
   int i;
   void *res;
 
-  for (i = 0; i < pool->sz; ++i)
+  for (i = 0; i < pool->sz; i++)
     {
       pthread_join (pool->keys[i].id, res);
 
@@ -153,6 +152,7 @@ jiff_deinit (jiff_pool_t *pool)
   pthread_cond_destroy (&pool->updatecond);
   pthread_cond_destroy (&pool->readycond);
   pthread_mutex_destroy (&pool->mut);
+
   free (pool->q);
   free (pool->keys);
 }
