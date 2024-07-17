@@ -43,6 +43,7 @@ sail_channel_create ()
     {
       memset (chan, 0, sizeof (*chan));
       sail_connection_init (&chan->conn);
+      chan->key = -1;
       chan->state.sessinitiated = false;
     }
 
@@ -70,8 +71,6 @@ sail_collection_init (sail_collection_t *c, size_t sz)
       goto end;
     }
   c->sz = sz;
-  c->mersenne = 0x7FFFFFFF;
-  c->midpoint = 0x3FFFFFFE;
 
   retval = 0;
 
@@ -82,23 +81,47 @@ end:
 int
 sail_collection_add (sail_collection_t *c, sail_channel_t *chan)
 {
-  int idx;
+  int retval;
 
-  idx = c->midpoint % (c->midpoint - chan->conn.sockfd);
-  c->channs[idx] = chan;
+  if (chan->conn.sockfd > c->sz)
+    {
+      retval = -1;
+      goto end;
+    }
+  chan->key = chan->conn.sockfd;
+  c->channs[chan->key] = chan;
+  retval = 0;
 
-  return idx;
+end:
+  return retval;
+}
+
+void
+sail_collection_remove (sail_collection_t *c, sail_channel_t *chan)
+{
+  if (chan->key == -1)
+    {
+      goto end;
+    }
+  c->channs[chan->key] = 0;
+  chan->key = -1;
+
+end:
 }
 
 sail_channel_t *
 sail_collection_get_by_sockfd (sail_collection_t *c, int sockfd)
 {
   sail_channel_t *chan;
-  int idx;
 
-  idx = c->midpoint % (c->midpoint - sockfd);
-  chan = c->channs[idx];
+  if (sockfd > c->sz)
+    {
+      chan = NULL;
+      goto end;
+    }
+  chan = c->channs[sockfd];
 
+end:
   return chan;
 }
 
@@ -269,7 +292,7 @@ void
 sail_init ()
 {
   pthread_mutex_init (&mut, NULL);
-  sail_collection_init (&clientchans, 10);
+  sail_collection_init (&clientchans, SAIL_MAX_CLIENT_CONNECTIONS);
 }
 
 void
@@ -285,7 +308,7 @@ sail_terminate_channel (sail_channel_t *chan)
   SAIL_LOCK ();
   epoll_ctl (serverconn.sockfd, EPOLL_CTL_DEL, chan->conn.sockfd, NULL);
   close (chan->conn.sockfd);
-  clientchans.channs[chan->key] = 0;
+  sail_collection_remove (&clientchans, chan);
   sail_channel_destroy (chan);
   SAIL_UNLOCK ();
 }

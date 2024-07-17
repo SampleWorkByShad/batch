@@ -9,6 +9,7 @@
     "string.h": "c",
     "chrono": "c",
     "epoll.h": "c",
-    "netdb.h": "c"
+    "netdb.h": "c",
+    "stdbool.h": "c"
   }
 }

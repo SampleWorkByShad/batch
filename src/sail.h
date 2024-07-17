@@ -21,6 +21,10 @@
 #define SAIL_CHANNEL_STATUS_READY 0
 #define SAIL_CHANNEL_STATUS_PROCESSING 1
 
+#define SAIL_MAX_CLIENT_CONNECTIONS 10000
+
+#define SAIL_EPOLL_MAX_EVENTS 1000
+
 extern sail_connection_t serverconn;
 extern sail_collection_t clientchans;
 extern pthread_mutex_t mut;
@@ -38,6 +42,7 @@ void sail_channel_destroy (sail_channel_t *);
 
 int sail_collection_init (sail_collection_t *, size_t);
 int sail_collection_add (sail_collection_t *, sail_channel_t *);
+void sail_collection_remove (sail_collection_t *, sail_channel_t *);
 sail_channel_t *sail_collection_get_by_sockfd (sail_collection_t *, int);
 int sail_collection_deinit (sail_collection_t *);
 

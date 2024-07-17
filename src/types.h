@@ -39,8 +39,6 @@ typedef struct
 
 typedef struct
 {
-  unsigned int mersenne;
-  unsigned int midpoint;
   sail_channel_t **channs;
   size_t sz;
 } sail_collection_t;

@@ -16,10 +16,6 @@
 #include "sail.h"
 #include "types.h"
 
-#define BAT_MAX_FILE_NAME 255
-#define BAT_CONNECTION_STATE_TERMINATE 100
-#define BAT_MAX_EVENTS 1000
-
 pthread_mutex_t mut;
 sail_connection_t serverconn;
 sail_collection_t clientchans;
@@ -37,7 +33,7 @@ main (int argc, char *argv[])
   int sockopt;
   sail_channel_t *chan, *newchan;
   sail_pool_t greetpool, procpool;
-  struct epoll_event ev, events[BAT_MAX_EVENTS];
+  struct epoll_event ev, events[SAIL_EPOLL_MAX_EVENTS];
 
   proto = getprotobyname ("tcp");
 
@@ -114,7 +110,7 @@ main (int argc, char *argv[])
 
   while (true)
     {
-      nfds = epoll_wait (epollfd, events, BAT_MAX_EVENTS, -1);
+      nfds = epoll_wait (epollfd, events, SAIL_EPOLL_MAX_EVENTS, -1);
 
       if (nfds == -1)
         {
@@ -151,7 +147,6 @@ main (int argc, char *argv[])
               rv = sail_collection_add (&clientchans, newchan);
               if (rv != -1)
                 {
-                  newchan->key = rv;
                   rv = sail_pool_queue_add (&greetpool, (void *)newchan);
 
                   if (rv != -1)
@@ -174,7 +169,7 @@ main (int argc, char *argv[])
                 {
                   SAIL_LOCK ();
                   chan = sail_collection_get_by_sockfd (&clientchans,
-                                                         events[i].data.fd);
+                                                        events[i].data.fd);
                   if (chan != NULL
                       && chan->status == SAIL_CHANNEL_STATUS_READY)
                     {
