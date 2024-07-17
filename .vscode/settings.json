@@ -1,0 +1,14 @@
+{
+  "files.associations": {
+    "stdlib.h": "c",
+    "in.h": "c",
+    "inet.h": "c",
+    "pthread.h": "c",
+    "types.h": "c",
+    "socket.h": "c",
+    "string.h": "c",
+    "chrono": "c",
+    "epoll.h": "c",
+    "netdb.h": "c"
+  }
+}

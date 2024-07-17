@@ -13,84 +13,16 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "chann.h"
-#include "jiffy.h"
+#include "sail.h"
+#include "types.h"
 
 #define BAT_MAX_FILE_NAME 255
 #define BAT_CONNECTION_STATE_TERMINATE 100
 #define BAT_MAX_EVENTS 1000
 
 pthread_mutex_t mut;
-
-#define bat_lock() pthread_mutex_lock (&mut)
-#define bat_unlock() pthread_mutex_unlock (&mut)
-
-chan_connection_t serverconn;
-chan_collection_t clientchans;
-
-static void
-bat_init ()
-{
-  pthread_mutex_init (&mut, NULL);
-  chan_collection_init (&clientchans, 10);
-}
-
-static void
-bat_deinit ()
-{
-  chan_collection_deinit (&clientchans);
-  pthread_mutex_destroy (&mut);
-}
-
-static void
-bat_terminate (chan_channel_t *chan)
-{
-  bat_lock ();
-  epoll_ctl (serverconn.sockfd, EPOLL_CTL_DEL, chan->conn.sockfd, NULL);
-  close (chan->conn.sockfd);
-  clientchans.channs[chan->key] = 0;
-  chan_destroy (chan);
-  bat_unlock ();
-}
-
-static void *
-bat_routine_read (void *arg)
-{
-  chan_channel_t *chan;
-  int rc;
-  int state;
-  bool quit = false;
-
-  chan = (chan_channel_t *)arg;
-
-  state = 0;
-  chan->insz = 100;
-  chan->in = (char *)calloc (chan->insz, sizeof (char));
-  rc = read (chan->conn.sockfd, chan->in, chan->insz);
-  while (rc > 0)
-    {
-      if (strstr (chan->in, "quit") != NULL)
-        {
-          quit = true;
-          break;
-        }
-      memset (chan->in, '\0', chan->insz);
-      rc = read (chan->conn.sockfd, chan->in, chan->insz);
-    }
-  free (chan->in);
-  chan->insz = 0;
-
-  if (quit)
-    {
-      bat_terminate (chan);
-    }
-  else
-    {
-      bat_lock ();
-      chan->state = state;
-      bat_unlock ();
-    }
-}
+sail_connection_t serverconn;
+sail_collection_t clientchans;
 
 int
 main (int argc, char *argv[])
@@ -103,8 +35,8 @@ main (int argc, char *argv[])
   socklen_t caddr_len;
   struct protoent *proto;
   int sockopt;
-  chan_channel_t *chan, *newchan;
-  jiff_pool_t readpool;
+  sail_channel_t *chan, *newchan;
+  sail_pool_t greetpool, procpool;
   struct epoll_event ev, events[BAT_MAX_EVENTS];
 
   proto = getprotobyname ("tcp");
@@ -132,7 +64,7 @@ main (int argc, char *argv[])
     {
       perror ("setsockopt() failed");
     }
-  chan_connection_init (&serverconn);
+  sail_connection_init (&serverconn);
   memset (&serverconn.sockaddr, 0, serverconn.sockaddr_len);
   serverconn.sockaddr.sin_family = AF_INET;
   serverconn.sockaddr.sin_port = htons (3000);
@@ -155,10 +87,13 @@ main (int argc, char *argv[])
       goto cleanup;
     }
   retval = EXIT_SUCCESS;
-  bat_init ();
-  jiff_init (&readpool, 10, 10, &bat_routine_read);
-  jiff_activate (&readpool);
-  jiff_ready (&readpool);
+  sail_init ();
+  sail_pool_init (&greetpool, 3, 1000, &sail_greet_routine);
+  sail_pool_activate (&greetpool);
+  sail_pool_ready (&greetpool);
+  sail_pool_init (&procpool, 7, 1000, &sail_proc_routine);
+  sail_pool_activate (&procpool);
+  sail_pool_ready (&procpool);
   caddr_len = sizeof (caddr);
   epollfd = epoll_create1 (0);
 
@@ -199,7 +134,6 @@ main (int argc, char *argv[])
                   perror ("accept() failed");
                   continue;
                 }
-              printf ("accepted() = %d", cfd);
               fcntl (cfd, F_SETFL, O_NONBLOCK);
               ev.events = EPOLLIN | EPOLLET;
               ev.data.fd = cfd;
@@ -209,54 +143,65 @@ main (int argc, char *argv[])
                   perror ("epoll_ctl() failed");
                   exit (EXIT_FAILURE);
                 }
-              newchan = chan_create ();
-              chan_init (newchan);
+              newchan = sail_channel_create ();
               memcpy (&newchan->conn.sockaddr, &caddr,
                       newchan->conn.sockaddr_len);
               newchan->conn.sockfd = cfd;
-              bat_lock ();
-              rv = chan_collection_add (&clientchans, newchan);
+              SAIL_LOCK ();
+              rv = sail_collection_add (&clientchans, newchan);
               if (rv != -1)
                 {
                   newchan->key = rv;
+                  rv = sail_pool_queue_add (&greetpool, (void *)newchan);
+
+                  if (rv != -1)
+                    {
+                      newchan->status = SAIL_CHANNEL_STATUS_PROCESSING;
+                      sail_pool_notify (&greetpool);
+                    }
                 }
-              bat_unlock ();
-              if (rv == -1)
+              else
                 {
-                  perror ("chan_collection_add() failed");
+                  perror ("sail_collection_add() failed");
                   close (cfd);
-                  chan_destroy (newchan);
+                  sail_channel_destroy (newchan);
                 }
+              SAIL_UNLOCK ();
             }
           else
             {
               if (events[i].events & EPOLLIN)
                 {
-                  bat_lock ();
-                  chan = chan_collection_find_by_sockfd (&clientchans,
+                  SAIL_LOCK ();
+                  chan = sail_collection_get_by_sockfd (&clientchans,
                                                          events[i].data.fd);
-                  if (chan != NULL && chan->state == 0)
+                  if (chan != NULL
+                      && chan->status == SAIL_CHANNEL_STATUS_READY)
                     {
-                      rv = jiff_queue_add (&readpool, (void *)chan);
+                      rv = sail_pool_queue_add (&procpool, (void *)chan);
 
                       if (rv != -1)
                         {
-                          chan->state = 1;
-                          jiff_notify (&readpool);
+                          chan->status = SAIL_CHANNEL_STATUS_PROCESSING;
+                          sail_pool_notify (&procpool);
                         }
                     }
-                  bat_unlock ();
+                  SAIL_UNLOCK ();
                 }
             }
         }
     }
 
 cleanup:
-  jiff_deactivate (&readpool);
-  jiff_notify (&readpool);
-  jiff_winddown (&readpool);
-  jiff_deinit (&readpool);
-  bat_deinit ();
+  sail_pool_deactivate (&procpool);
+  sail_pool_notify (&procpool);
+  sail_pool_winddown (&procpool);
+  sail_pool_deinit (&procpool);
+  sail_pool_deactivate (&greetpool);
+  sail_pool_notify (&greetpool);
+  sail_pool_winddown (&greetpool);
+  sail_pool_deinit (&greetpool);
+  sail_deinit ();
 
 end:
   return retval;

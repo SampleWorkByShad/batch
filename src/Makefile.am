@@ -1,2 +1,2 @@
-bin_PROGRAMS = batch
-batch_SOURCES = jiffy.c chann.c main.c
+bin_PROGRAMS = sail
+sail_SOURCES = sail.c main.c
