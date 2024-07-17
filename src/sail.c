@@ -44,7 +44,7 @@ sail_channel_create ()
       memset (chan, 0, sizeof (*chan));
       sail_connection_init (&chan->conn);
       chan->key = -1;
-      chan->state.sessinitiated = false;
+      chan->state.session_initiated = false;
     }
 
   return chan;
@@ -341,7 +341,7 @@ sail_greet_routine (void *arg)
     }
   else
     {
-      chan->state.sessinitiated = true;
+      chan->state.session_initiated = true;
     }
   sail_buffer_reset (&chan->out);
   SAIL_LOCK ();

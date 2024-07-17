@@ -11,7 +11,7 @@
 
 typedef struct
 {
-  bool sessinitiated;
+  bool session_initiated;
 } sail_state_t;
 
 typedef struct
