@@ -42,9 +42,9 @@ sail_channel_create ()
   if (chan != NULL)
     {
       memset (chan, 0, sizeof (*chan));
-      sail_connection_init (&chan->conn);
       chan->key = -1;
       chan->state.session_initiated = false;
+      sail_connection_init (&chan->conn);
     }
 
   return chan;
@@ -168,16 +168,14 @@ sail_pool_routine (void *arg)
 
   while (meta->pool->active)
     {
-      for (i = 0; i < meta->pool->qsz; i++)
+      for (i = 0; i < meta->pool->qsz; ++i)
         {
           if (meta->pool->q[i] != 0)
             {
               item = meta->pool->q[i];
               meta->pool->q[i] = 0;
               pthread_mutex_unlock (&meta->pool->mut);
-
               meta->pool->routine (item);
-
               pthread_mutex_lock (&meta->pool->mut);
             }
         }
@@ -196,7 +194,7 @@ sail_pool_activate (sail_pool_t *pool)
 
   pool->active = true;
 
-  for (i = 0; i < pool->sz; i++)
+  for (i = 0; i < pool->sz; ++i)
     {
       arg = (sail_pool_meta_t *)malloc (sizeof (*arg));
 
@@ -237,7 +235,7 @@ sail_pool_queue_add (sail_pool_t *pool, void *item)
 
   pthread_mutex_lock (&pool->mut);
 
-  for (i = 0; i < pool->qsz; i++)
+  for (i = 0; i < pool->qsz; ++i)
     {
       if (pool->q[i] == 0)
         {
@@ -271,7 +269,7 @@ sail_pool_winddown (sail_pool_t *pool)
   int i;
   void *res;
 
-  for (i = 0; i < pool->sz; i++)
+  for (i = 0; i < pool->sz; ++i)
     {
       pthread_join (pool->keys[i].id, res);
       free (res);
