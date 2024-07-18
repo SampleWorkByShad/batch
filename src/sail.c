@@ -5,7 +5,7 @@ sail_buffer_allocate (sail_buffer_t *buf, size_t sz)
 {
   int retval;
 
-  buf->data = (char *)calloc (sz, sizeof (char));
+  buf->data = calloc (sz, sizeof (char));
 
   if (buf->data == NULL)
     {
@@ -37,7 +37,7 @@ sail_channel_create ()
 {
   sail_channel_t *chan;
 
-  chan = (sail_channel_t *)malloc (sizeof (*chan));
+  chan = malloc (sizeof (*chan));
 
   if (chan != NULL)
     {
@@ -62,7 +62,7 @@ sail_collection_init (sail_collection_t *c, size_t sz)
 {
   int retval;
 
-  c->channs = (sail_channel_t **)calloc (sz, sizeof (*c->channs));
+  c->channs = calloc (sz, sizeof (*c->channs));
 
   if (c->channs == NULL)
     {
@@ -135,11 +135,11 @@ sail_pool_init (sail_pool_t *pool, size_t sz, size_t qsz,
 {
   int retval;
 
-  pool->keys = (sail_pool_key_t *)calloc (sz, sizeof (*pool->keys));
+  pool->keys = calloc (sz, sizeof (*pool->keys));
   pool->sz = sz;
   pool->counter = 0;
   pool->active = false;
-  pool->q = (void **)calloc (qsz, sizeof (*pool->q));
+  pool->q = calloc (qsz, sizeof (*pool->q));
   pool->qsz = qsz;
   pool->routine = routine;
   pthread_mutex_init (&pool->mut, NULL);
@@ -193,7 +193,7 @@ sail_pool_activate (sail_pool_t *pool)
 
   for (i = 0; i < pool->sz; ++i)
     {
-      arg = (sail_pool_meta_t *)malloc (sizeof (*arg));
+      arg = malloc (sizeof (*arg));
 
       if (arg == NULL)
         continue;
@@ -343,7 +343,7 @@ sail_command_parse (sail_channel_t *chan)
       args = delim + 1;
     }
   verblen = delim - chan->in.data;
-  chan->ctl.command.verb = (char *)calloc (verblen + 1, sizeof (char));
+  chan->ctl.command.verb = calloc (verblen + 1, sizeof (char));
   memcpy (chan->ctl.command.verb, chan->in.data, verblen);
 
   for (i = 0; i < verblen; ++i)
@@ -354,7 +354,7 @@ sail_command_parse (sail_channel_t *chan)
 
   if (argslen > 0)
     {
-      chan->ctl.command.args = (char *)calloc (argslen + 1, sizeof (char));
+      chan->ctl.command.args = calloc (argslen + 1, sizeof (char));
       memcpy (chan->ctl.command.args, args, argslen);
     }
   retval = 0;
