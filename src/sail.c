@@ -1,7 +1,7 @@
 #include "sail.h"
 
 int
-sail_buffer_allocate (sail_buffer_t *buf, size_t sz)
+sail_allocate_buffer (sail_buffer_t *buf, size_t sz)
 {
   int retval;
 
@@ -20,37 +20,37 @@ end:
 }
 
 void
-sail_buffer_reset (sail_buffer_t *buf)
+sail_reset_buffer (sail_buffer_t *buf)
 {
   free (buf->data);
   buf->sz = 0;
 }
 
 void
-sail_connection_init (sail_connection_t *conn)
+sail_init_connection (sail_connection_t *conn)
 {
   conn->sockaddr_len = sizeof (conn->sockaddr);
 }
 
 sail_channel_t *
-sail_channel_create ()
+sail_create_channel ()
 {
   sail_channel_t *chan;
 
-  chan = malloc (sizeof (*chan));
+  chan = malloc (sizeof (chan));
 
   if (chan != NULL)
     {
-      memset (chan, 0, sizeof (*chan));
+      memset (chan, 0, sizeof (chan));
       chan->key = -1;
-      sail_connection_init (&chan->conn);
+      sail_init_connection (&chan->conn);
     }
 
   return chan;
 }
 
 void
-sail_channel_destroy (sail_channel_t *chan)
+sail_destroy_channel (sail_channel_t *chan)
 {
   free (chan->in.data);
   free (chan->out.data);
@@ -58,7 +58,7 @@ sail_channel_destroy (sail_channel_t *chan)
 }
 
 int
-sail_collection_init (sail_collection_t *c, size_t sz)
+sail_init_collection (sail_collection_t *c, size_t sz)
 {
   int retval;
 
@@ -77,7 +77,7 @@ end:
 }
 
 int
-sail_collection_add (sail_collection_t *c, sail_channel_t *chan)
+sail_add_collection_channel (sail_collection_t *c, sail_channel_t *chan)
 {
   int retval;
 
@@ -95,7 +95,7 @@ end:
 }
 
 void
-sail_collection_remove (sail_collection_t *c, sail_channel_t *chan)
+sail_remove_collection_channel (sail_collection_t *c, sail_channel_t *chan)
 {
   if (chan->key == -1)
     {
@@ -108,7 +108,7 @@ end:
 }
 
 sail_channel_t *
-sail_collection_get_by_sockfd (sail_collection_t *c, int sockfd)
+sail_get_collection_channel_by_sockfd (sail_collection_t *c, int sockfd)
 {
   sail_channel_t *chan;
 
@@ -124,14 +124,14 @@ end:
 }
 
 int
-sail_collection_deinit (sail_collection_t *c)
+sail_deinit_collection (sail_collection_t *c)
 {
   free (c->channs);
 }
 
 int
-sail_pool_init (sail_pool_t *pool, size_t sz, size_t qsz,
-                void *routine (void *arg))
+sail_init_pool (sail_pool_t *pool, size_t sz, size_t qsz,
+                void routine (sail_channel_t *chan))
 {
   int retval;
 
@@ -154,10 +154,11 @@ void *
 sail_pool_routine (void *arg)
 {
   sail_pool_meta_t *meta;
-  void *item;
+  sail_channel_t *chan;
   int i;
 
   meta = (sail_pool_meta_t *)arg;
+
   pthread_mutex_lock (&meta->pool->mut);
   meta->pool->counter--;
   pthread_mutex_unlock (&meta->pool->mut);
@@ -170,10 +171,10 @@ sail_pool_routine (void *arg)
         {
           if (meta->pool->q[i] != 0)
             {
-              item = meta->pool->q[i];
+              chan = meta->pool->q[i];
               meta->pool->q[i] = 0;
               pthread_mutex_unlock (&meta->pool->mut);
-              meta->pool->routine (item);
+              meta->pool->routine (chan);
               pthread_mutex_lock (&meta->pool->mut);
             }
         }
@@ -184,7 +185,7 @@ sail_pool_routine (void *arg)
 }
 
 void
-sail_pool_activate (sail_pool_t *pool)
+sail_activate_pool (sail_pool_t *pool)
 {
   int i;
   sail_pool_meta_t *arg;
@@ -204,7 +205,7 @@ sail_pool_activate (sail_pool_t *pool)
 }
 
 void
-sail_pool_deactivate (sail_pool_t *pool)
+sail_deactivate_pool (sail_pool_t *pool)
 {
   pthread_mutex_lock (&pool->mut);
   pool->active = false;
@@ -224,7 +225,7 @@ sail_pool_ready (sail_pool_t *pool)
 }
 
 int
-sail_pool_queue_add (sail_pool_t *pool, void *item)
+sail_add_pool_queue_channel (sail_pool_t *pool, sail_channel_t *chan)
 {
   int x;
   int i;
@@ -235,7 +236,7 @@ sail_pool_queue_add (sail_pool_t *pool, void *item)
     {
       if (pool->q[i] == 0)
         {
-          pool->q[i] = item;
+          pool->q[i] = chan;
           break;
         }
     }
@@ -254,26 +255,24 @@ sail_pool_queue_add (sail_pool_t *pool, void *item)
 }
 
 void
-sail_pool_notify (sail_pool_t *pool)
+sail_notify_pool (sail_pool_t *pool)
 {
   pthread_cond_broadcast (&pool->updatecond);
 }
 
 void
-sail_pool_winddown (sail_pool_t *pool)
+sail_winddown_pool (sail_pool_t *pool)
 {
   int i;
-  void *res;
 
   for (i = 0; i < pool->sz; ++i)
     {
-      pthread_join (pool->keys[i].id, res);
-      free (res);
+      pthread_join (pool->keys[i].id, NULL);
     }
 }
 
 int
-sail_pool_deinit (sail_pool_t *pool)
+sail_deinit_pool (sail_pool_t *pool)
 {
   pthread_cond_destroy (&pool->updatecond);
   pthread_cond_destroy (&pool->readycond);
@@ -282,33 +281,123 @@ sail_pool_deinit (sail_pool_t *pool)
   free (pool->keys);
 }
 
+int
+sail_helo_action_handler (sail_channel_t *chan)
+{
+  int retval;
+
+  retval = 0;
+end:
+  return retval;
+}
+
+int
+sail_ehlo_action_handler (sail_channel_t *chan)
+{
+  int retval;
+
+  retval = 0;
+end:
+  return retval;
+}
+
+int
+sail_mail_action_handler (sail_channel_t *chan)
+{
+  int retval;
+
+  retval = 0;
+end:
+  return retval;
+}
+
+int
+sail_rcpt_action_handler (sail_channel_t *chan)
+{
+  int retval;
+
+  retval = 0;
+end:
+  return retval;
+}
+
+int
+sail_data_action_handler (sail_channel_t *chan)
+{
+  int retval;
+
+  retval = 0;
+end:
+  return retval;
+}
+
+int
+sail_rset_action_handler (sail_channel_t *chan)
+{
+  int retval;
+
+  retval = 0;
+end:
+  return retval;
+}
+
+int
+sail_noop_action_handler (sail_channel_t *chan)
+{
+  int retval;
+
+  retval = 0;
+end:
+  return retval;
+}
+
+int
+sail_quit_action_handler (sail_channel_t *chan)
+{
+  int retval;
+
+  retval = 0;
+end:
+  return retval;
+}
+
+int
+sail_vrfy_action_handler (sail_channel_t *chan)
+{
+  int retval;
+
+  retval = 0;
+end:
+  return retval;
+}
+
 void
 sail_init ()
 {
-  pthread_mutex_init (&mut, NULL);
-  sail_collection_init (&clientchans, SAIL_MAX_CLIENT_CONNECTIONS);
+  pthread_mutex_init (&serverinst.mut, NULL);
+  sail_init_collection (&serverinst.clients, SAIL_MAX_CLIENT_CONNECTIONS);
 }
 
 void
 sail_deinit ()
 {
-  sail_collection_deinit (&clientchans);
-  pthread_mutex_destroy (&mut);
+  sail_deinit_collection (&serverinst.clients);
+  pthread_mutex_destroy (&serverinst.mut);
 }
 
 void
 sail_terminate_channel (sail_channel_t *chan)
 {
-  epoll_ctl (serverconn.sockfd, EPOLL_CTL_DEL, chan->conn.sockfd, NULL);
+  epoll_ctl (serverinst.conn.sockfd, EPOLL_CTL_DEL, chan->conn.sockfd, NULL);
   close (chan->conn.sockfd);
   SAIL_LOCK ();
-  sail_collection_remove (&clientchans, chan);
+  sail_remove_collection_channel (&serverinst.clients, chan);
   SAIL_UNLOCK ();
-  sail_channel_destroy (chan);
+  sail_destroy_channel (chan);
 }
 
 int
-sail_command_parse (sail_channel_t *chan)
+sail_parse_command (sail_channel_t *chan)
 {
   int retval;
   char *eol;
@@ -364,30 +453,69 @@ end:
 }
 
 int
-sail_reply (sail_channel_t *chan, int code, char *reply)
+sail_append_reply (sail_channel_t *chan, int linelen, int code, char delim,
+                   char *text)
 {
   int retval;
+  int rv;
+  char *offset;
 
+  offset = chan->out.data + strlen (chan->out.data);
+
+  if (text == NULL)
+    {
+      rv = snprintf (offset, linelen, "%d\r\n", code);
+    }
+  else
+    {
+      rv = snprintf (offset, linelen, "%d%c%s\r\n", code, delim, text);
+    }
+
+  if (rv < 0)
+    {
+      retval = -1;
+      goto end;
+    }
   retval = 0;
+
 end:
   return retval;
 }
 
 int
-sail_command_reset (sail_command_t *cmd)
+sail_reset_command (sail_command_t *cmd)
 {
   free (cmd->verb);
   free (cmd->args);
+  memset (cmd, 0, sizeof (*cmd));
 }
 
-void *
-sail_greet_routine (void *arg)
+sail_command_action_t *
+sail_get_command_action (char *keyname)
 {
-  sail_channel_t *chan;
+  sail_command_action_t *action;
+  int i;
+
+  action = NULL;
+
+  for (i = 0; i < SAIL_MAX_REGISTERED_COMMANDS; ++i)
+    {
+      if (commandregistry->actions[i] != 0
+          && strcmp (commandregistry.actions[i].keyname, keyname))
+        {
+          action = commandregistry.actions[i];
+        }
+    }
+
+  return action;
+}
+
+void
+sail_greet_routine (sail_channel_t *chan)
+{
   int rv;
 
-  chan = (sail_channel_t *)arg;
-  sail_buffer_allocate (&chan->out, 32);
+  sail_allocate_buffer (&chan->out, 32);
   rv = snprintf (chan->out.data, chan->out.sz, "220 %s %s\r\n", PACKAGE_NAME,
                  PACKAGE_VERSION);
 
@@ -409,8 +537,8 @@ sail_greet_routine (void *arg)
   else
     {
       chan->ctl.state.session_initiated = true;
+      sail_reset_buffer (&chan->out);
     }
-  sail_buffer_reset (&chan->out);
   SAIL_LOCK ();
   chan->status = SAIL_CHANNEL_STATUS_READY;
   SAIL_UNLOCK ();
@@ -418,88 +546,33 @@ sail_greet_routine (void *arg)
 end:
 }
 
-void *
-sail_proc_routine (void *arg)
+void
+sail_proc_routine (sail_channel_t *chan)
 {
-  sail_channel_t *chan;
   int rv;
+  int i;
 
-  chan = (sail_channel_t *)arg;
-  sail_buffer_allocate (&chan->in, SAIL_COMMAND_LINE_TOTAL_MAX_LENGTH);
+  sail_allocate_buffer (&chan->in, SAIL_COMMAND_LINE_TOTAL_MAX_LENGTH);
   rv = read (chan->conn.sockfd, chan->in.data, chan->in.sz);
 
   if (rv <= 0)
     {
       goto finish;
     }
-  rv = sail_command_parse (chan);
+  rv = sail_parse_command (chan);
 
   if (rv == -1)
     {
       goto finish;
     }
 
-  if (SAIL_COMMAND_EQUALS (chan->ctl.command, "helo"))
-    {
-      printf ("helo\n");
-    }
+  // rv = write (chan->conn.sockfd, chan->out.data, strlen (chan->out.data));
 
-  if (SAIL_COMMAND_EQUALS (chan->ctl.command, "ehlo"))
-    {
-      printf ("ehlo\n");
-      goto finish;
-    }
-
-  if (SAIL_COMMAND_EQUALS (chan->ctl.command, "mail"))
-    {
-      printf ("mail\n");
-      goto finish;
-    }
-
-  if (SAIL_COMMAND_EQUALS (chan->ctl.command, "rcpt"))
-    {
-      printf ("rcpt\n");
-      goto finish;
-    }
-
-  if (SAIL_COMMAND_EQUALS (chan->ctl.command, "rcpt"))
-    {
-      printf ("rcpt\n");
-      goto finish;
-    }
-
-  if (SAIL_COMMAND_EQUALS (chan->ctl.command, "data"))
-    {
-      printf ("data\n");
-      goto finish;
-    }
-
-  if (SAIL_COMMAND_EQUALS (chan->ctl.command, "rset"))
-    {
-      printf ("rset\n");
-      goto finish;
-    }
-
-  if (SAIL_COMMAND_EQUALS (chan->ctl.command, "noop"))
-    {
-      printf ("noop\n");
-      goto finish;
-    }
-
-  if (SAIL_COMMAND_EQUALS (chan->ctl.command, "quit"))
-    {
-      sail_terminate_channel (chan);
-      goto end;
-    }
-
-  if (SAIL_COMMAND_EQUALS (chan->ctl.command, "vrfy"))
-    {
-      printf ("vrfy\n");
-      goto finish;
-    }
-
+cleanup:
+  sail_reset_command (&chan->ctl.command);
+  sail_reset_buffer (&chan->out);
 finish:
-  sail_buffer_reset (&chan->in);
+  sail_reset_buffer (&chan->in);
   SAIL_LOCK ();
   chan->status = SAIL_CHANNEL_STATUS_READY;
   SAIL_UNLOCK ();

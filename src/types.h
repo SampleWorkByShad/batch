@@ -9,6 +9,8 @@
 #ifndef TYPES_H_
 #define TYPES_H_
 
+#define SAIL_MAX_REGISTERED_COMMANDS 50
+
 typedef struct
 {
   char *verb;
@@ -20,6 +22,7 @@ typedef struct
   bool session_initiated;
   bool client_initiated;
   bool mail_transaction;
+  bool receiving_data;
 } sail_state_t;
 
 typedef struct
@@ -70,15 +73,33 @@ typedef struct
   pthread_mutex_t mut;
   pthread_cond_t readycond;
   pthread_cond_t updatecond;
-  void *(*routine) (void *);
+  void (*routine) (sail_channel_t *);
   bool active;
   size_t qsz;
-  void **q;
+  sail_channel_t **q;
 } sail_pool_t;
 
 typedef struct
 {
   sail_pool_t *pool;
 } sail_pool_meta_t;
+
+typedef struct
+{
+  char keyname[32];
+  int (*handler) (sail_channel_t *);
+} sail_command_action_t;
+
+typedef struct
+{
+  sail_command_action_t actions[SAIL_MAX_REGISTERED_COMMANDS];
+} sail_command_registry_t;
+
+struct sail_server
+{
+  sail_connection_t conn;
+  sail_collection_t clients;
+  pthread_mutex_t mut;
+};
 
 #endif

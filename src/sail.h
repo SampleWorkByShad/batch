@@ -32,45 +32,55 @@
 
 #define SAIL_COMMAND_EQUALS(c, s) strcmp (c.verb, s) == 0
 
-extern sail_connection_t serverconn;
-extern sail_collection_t clientchans;
-extern pthread_mutex_t mut;
+extern sail_command_registry_t commandregistry;
+extern struct sail_server serverinst;
 
-#define SAIL_LOCK() pthread_mutex_lock (&mut)
-#define SAIL_UNLOCK() pthread_mutex_unlock (&mut)
+#define SAIL_LOCK() pthread_mutex_lock (&serverinst.mut)
+#define SAIL_UNLOCK() pthread_mutex_unlock (&serverinst.mut)
 
-int sail_buffer_allocate (sail_buffer_t *, size_t);
-void sail_buffer_reset (sail_buffer_t *);
+int sail_allocate_buffer (sail_buffer_t *, size_t);
+void sail_reset_buffer (sail_buffer_t *);
 
-void sail_connection_init (sail_connection_t *);
+void sail_init_connection (sail_connection_t *);
 
-sail_channel_t *sail_channel_create ();
-void sail_channel_destroy (sail_channel_t *);
+sail_channel_t *sail_create_channel ();
+void sail_destroy_channel (sail_channel_t *);
 
-int sail_collection_init (sail_collection_t *, size_t);
-int sail_collection_add (sail_collection_t *, sail_channel_t *);
-void sail_collection_remove (sail_collection_t *, sail_channel_t *);
-sail_channel_t *sail_collection_get_by_sockfd (sail_collection_t *, int);
-int sail_collection_deinit (sail_collection_t *);
+int sail_init_collection (sail_collection_t *, size_t);
+int sail_add_collection_channel (sail_collection_t *, sail_channel_t *);
+void sail_remove_collection_channel (sail_collection_t *, sail_channel_t *);
+sail_channel_t *sail_get_collection_channel_by_sockfd (sail_collection_t *,
+                                                       int);
+int sail_deinit_collection (sail_collection_t *);
 
-int sail_pool_init (sail_pool_t *, size_t, size_t, void *(void *));
+int sail_init_pool (sail_pool_t *, size_t, size_t, void (sail_channel_t *));
 void *sail_pool_routine (void *);
-void sail_pool_activate (sail_pool_t *);
-void sail_pool_deactivate (sail_pool_t *);
+void sail_activate_pool (sail_pool_t *);
+void sail_deactivate_pool (sail_pool_t *);
 void sail_pool_ready (sail_pool_t *);
-int sail_pool_queue_add (sail_pool_t *, void *);
-void sail_pool_notify (sail_pool_t *);
-void sail_pool_winddown (sail_pool_t *);
-int sail_pool_deinit (sail_pool_t *);
+int sail_add_pool_queue_channel (sail_pool_t *, sail_channel_t *);
+void sail_notify_pool (sail_pool_t *);
+void sail_winddown_pool (sail_pool_t *);
+int sail_deinit_pool (sail_pool_t *);
+int sail_parse_command (sail_channel_t *);
+int sail_reset_command (sail_command_t *);
 
-int sail_command_parse (sail_channel_t *);
-int sail_command_reset (sail_command_t *);
+int sail_helo_action_handler (sail_channel_t *);
+int sail_ehlo_action_handler (sail_channel_t *);
+int sail_mail_action_handler (sail_channel_t *);
+int sail_rcpt_action_handler (sail_channel_t *);
+int sail_data_action_handler (sail_channel_t *);
+int sail_rset_action_handler (sail_channel_t *);
+int sail_noop_action_handler (sail_channel_t *);
+int sail_quit_action_handler (sail_channel_t *);
+int sail_vrfy_action_handler (sail_channel_t *);
 
 void sail_init ();
 void sail_deinit ();
 void sail_terminate_channel (sail_channel_t *);
-int sail_reply (sail_channel_t *, int, char *);
-void *sail_greet_routine (void *);
-void *sail_proc_routine (void *);
+int sail_append_reply (sail_channel_t *, int, int, char, char *);
+sail_command_action_t *sail_get_command_action (char *keyname);
+void sail_greet_routine (sail_channel_t *);
+void sail_proc_routine (sail_channel_t *);
 
 #endif

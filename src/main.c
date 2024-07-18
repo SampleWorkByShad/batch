@@ -16,9 +16,19 @@
 #include "sail.h"
 #include "types.h"
 
-pthread_mutex_t mut;
-sail_connection_t serverconn;
-sail_collection_t clientchans;
+sail_command_registry_t commandregistry
+    = { .actions = {
+            { .keyname = "helo", .handler = &sail_helo_action_handler },
+            { .keyname = "ehlo", .handler = &sail_ehlo_action_handler },
+            { .keyname = "mail", .handler = &sail_mail_action_handler },
+            { .keyname = "rcpt", .handler = &sail_rcpt_action_handler },
+            { .keyname = "data", .handler = &sail_data_action_handler },
+            { .keyname = "rset", .handler = &sail_rset_action_handler },
+            { .keyname = "noop", .handler = &sail_noop_action_handler },
+            { .keyname = "quit", .handler = &sail_quit_action_handler },
+            { .keyname = "vrfy", .handler = &sail_vrfy_action_handler },
+        } };
+struct sail_server serverinst;
 
 int
 main (int argc, char *argv[])
@@ -51,22 +61,23 @@ main (int argc, char *argv[])
       retval = EXIT_FAILURE;
       goto end;
     }
-  serverconn.sockfd = sfd;
+  serverinst.conn.sockfd = sfd;
   sockopt = 1;
-  rv = setsockopt (serverconn.sockfd, SOL_SOCKET, SO_REUSEADDR, &sockopt,
+  rv = setsockopt (serverinst.conn.sockfd, SOL_SOCKET, SO_REUSEADDR, &sockopt,
                    sizeof (sockopt));
 
   if (rv == -1)
     {
       perror ("setsockopt() failed");
     }
-  sail_connection_init (&serverconn);
-  memset (&serverconn.sockaddr, 0, serverconn.sockaddr_len);
-  serverconn.sockaddr.sin_family = AF_INET;
-  serverconn.sockaddr.sin_port = htons (3000);
-  inet_aton ("0.0.0.0", &serverconn.sockaddr.sin_addr);
-  rv = bind (serverconn.sockfd, (struct sockaddr *)&serverconn.sockaddr,
-             serverconn.sockaddr_len);
+  sail_init_connection (&serverinst.conn);
+  memset (&serverinst.conn.sockaddr, 0, serverinst.conn.sockaddr_len);
+  serverinst.conn.sockaddr.sin_family = AF_INET;
+  serverinst.conn.sockaddr.sin_port = htons (3000);
+  inet_aton ("0.0.0.0", &serverinst.conn.sockaddr.sin_addr);
+  rv = bind (serverinst.conn.sockfd,
+             (struct sockaddr *)&serverinst.conn.sockaddr,
+             serverinst.conn.sockaddr_len);
 
   if (rv == -1)
     {
@@ -74,7 +85,7 @@ main (int argc, char *argv[])
       retval = -1;
       goto cleanup;
     }
-  rv = listen (serverconn.sockfd, 50);
+  rv = listen (serverinst.conn.sockfd, 50);
 
   if (rv == -1)
     {
@@ -84,11 +95,11 @@ main (int argc, char *argv[])
     }
   retval = EXIT_SUCCESS;
   sail_init ();
-  sail_pool_init (&greetpool, 3, 1000, &sail_greet_routine);
-  sail_pool_activate (&greetpool);
+  sail_init_pool (&greetpool, 3, 1000, &sail_greet_routine);
+  sail_activate_pool (&greetpool);
   sail_pool_ready (&greetpool);
-  sail_pool_init (&procpool, 7, 1000, &sail_proc_routine);
-  sail_pool_activate (&procpool);
+  sail_init_pool (&procpool, 7, 1000, &sail_proc_routine);
+  sail_activate_pool (&procpool);
   sail_pool_ready (&procpool);
   caddr_len = sizeof (caddr);
   epollfd = epoll_create1 (0);
@@ -99,8 +110,8 @@ main (int argc, char *argv[])
       goto cleanup;
     }
   ev.events = EPOLLIN;
-  ev.data.fd = serverconn.sockfd;
-  rv = epoll_ctl (epollfd, EPOLL_CTL_ADD, serverconn.sockfd, &ev);
+  ev.data.fd = serverinst.conn.sockfd;
+  rv = epoll_ctl (epollfd, EPOLL_CTL_ADD, serverinst.conn.sockfd, &ev);
 
   if (rv == -1)
     {
@@ -120,7 +131,7 @@ main (int argc, char *argv[])
 
       for (i = 0; i <= nfds; ++i)
         {
-          if (events[i].data.fd == serverconn.sockfd)
+          if (events[i].data.fd == serverinst.conn.sockfd)
             {
               cfd = accept (events[i].data.fd, (struct sockaddr *)&caddr,
                             &caddr_len);
@@ -139,27 +150,28 @@ main (int argc, char *argv[])
                   perror ("epoll_ctl() failed");
                   exit (EXIT_FAILURE);
                 }
-              newchan = sail_channel_create ();
+              newchan = sail_create_channel ();
               memcpy (&newchan->conn.sockaddr, &caddr,
                       newchan->conn.sockaddr_len);
               newchan->conn.sockfd = cfd;
               SAIL_LOCK ();
-              rv = sail_collection_add (&clientchans, newchan);
+              rv = sail_add_collection_channel (&serverinst.clients, newchan);
               if (rv != -1)
                 {
-                  rv = sail_pool_queue_add (&greetpool, (void *)newchan);
+                  rv = sail_add_pool_queue_channel (&greetpool,
+                                                    (void *)newchan);
 
                   if (rv != -1)
                     {
                       newchan->status = SAIL_CHANNEL_STATUS_PROCESSING;
-                      sail_pool_notify (&greetpool);
+                      sail_notify_pool (&greetpool);
                     }
                 }
               else
                 {
-                  perror ("sail_collection_add() failed");
+                  perror ("sail_add_collection_channel() failed");
                   close (cfd);
-                  sail_channel_destroy (newchan);
+                  sail_destroy_channel (newchan);
                 }
               SAIL_UNLOCK ();
             }
@@ -168,17 +180,17 @@ main (int argc, char *argv[])
               if (events[i].events & EPOLLIN)
                 {
                   SAIL_LOCK ();
-                  chan = sail_collection_get_by_sockfd (&clientchans,
-                                                        events[i].data.fd);
+                  chan = sail_get_collection_channel_by_sockfd (
+                      &serverinst.clients, events[i].data.fd);
                   if (chan != NULL
                       && chan->status == SAIL_CHANNEL_STATUS_READY)
                     {
-                      rv = sail_pool_queue_add (&procpool, (void *)chan);
+                      rv = sail_add_pool_queue_channel (&procpool, chan);
 
                       if (rv != -1)
                         {
                           chan->status = SAIL_CHANNEL_STATUS_PROCESSING;
-                          sail_pool_notify (&procpool);
+                          sail_notify_pool (&procpool);
                         }
                     }
                   SAIL_UNLOCK ();
@@ -188,14 +200,14 @@ main (int argc, char *argv[])
     }
 
 cleanup:
-  sail_pool_deactivate (&procpool);
-  sail_pool_notify (&procpool);
-  sail_pool_winddown (&procpool);
-  sail_pool_deinit (&procpool);
-  sail_pool_deactivate (&greetpool);
-  sail_pool_notify (&greetpool);
-  sail_pool_winddown (&greetpool);
-  sail_pool_deinit (&greetpool);
+  sail_deactivate_pool (&procpool);
+  sail_notify_pool (&procpool);
+  sail_winddown_pool (&procpool);
+  sail_deinit_pool (&procpool);
+  sail_deactivate_pool (&greetpool);
+  sail_notify_pool (&greetpool);
+  sail_winddown_pool (&greetpool);
+  sail_deinit_pool (&greetpool);
   sail_deinit ();
 
 end:

@@ -14,6 +14,7 @@
     "config.h": "c",
     "unistd.h": "c",
     "fcntl.h": "c",
-    "stddef.h": "c"
+    "stddef.h": "c",
+    "stdio.h": "c"
   }
 }
