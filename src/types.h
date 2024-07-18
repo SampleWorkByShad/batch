@@ -11,8 +11,22 @@
 
 typedef struct
 {
+  char *verb;
+  char *args;
+} sail_command_t;
+
+typedef struct
+{
   bool session_initiated;
+  bool client_initiated;
+  bool mail_transaction;
 } sail_state_t;
+
+typedef struct
+{
+  sail_command_t command;
+  sail_state_t state;
+} sail_controller_t;
 
 typedef struct
 {
@@ -34,7 +48,7 @@ typedef struct
   sail_buffer_t in;
   sail_buffer_t out;
   int status;
-  sail_state_t state;
+  sail_controller_t ctl;
 } sail_channel_t;
 
 typedef struct
@@ -65,13 +79,6 @@ typedef struct
 typedef struct
 {
   sail_pool_t *pool;
-  int keyidx;
 } sail_pool_meta_t;
-
-typedef struct
-{
-  char verb[100];
-  char params[100];
-} sail_command_t;
 
 #endif

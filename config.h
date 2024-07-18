@@ -2,19 +2,19 @@
 /* config.h.in.  Generated from configure.ac by autoheader.  */
 
 /* Name of package */
-#define PACKAGE "batch"
+#define PACKAGE "sail"
 
 /* Define to the address where bug reports for this package should be sent. */
 #define PACKAGE_BUGREPORT "bug@shadclaiborne.com"
 
 /* Define to the full name of this package. */
-#define PACKAGE_NAME "batch"
+#define PACKAGE_NAME "sail"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "batch 1.0"
+#define PACKAGE_STRING "sail 1.0"
 
 /* Define to the one symbol short name of this package. */
-#define PACKAGE_TARNAME "batch"
+#define PACKAGE_TARNAME "sail"
 
 /* Define to the home page for this package. */
 #define PACKAGE_URL ""

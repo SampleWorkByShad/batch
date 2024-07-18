@@ -1,4 +1,4 @@
-AC_INIT([batch], [1.0], [bug@shadclaiborne.com])
+AC_INIT([sail], [1.0], [bug@shadclaiborne.com])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign])
 AC_PROG_CC
 AC_CONFIG_HEADERS([config.h])

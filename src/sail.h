@@ -1,6 +1,7 @@
 #include "types.h"
 #include <arpa/inet.h>
 #include <config.h>
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -18,12 +19,18 @@
 #ifndef SAIL_H_
 #define SAIL_H_
 
-#define SAIL_CHANNEL_STATUS_READY 0
-#define SAIL_CHANNEL_STATUS_PROCESSING 1
+#define SAIL_TEXT_LINE_TOTAL_MAX_LENGTH 1000
+#define SAIL_COMMAND_LINE_TOTAL_MAX_LENGTH 512
+#define SAIL_REPLY_LINE_TOTAL_MAX_LENGTH 512
 
 #define SAIL_MAX_CLIENT_CONNECTIONS 10000
 
 #define SAIL_EPOLL_MAX_EVENTS 1000
+
+#define SAIL_CHANNEL_STATUS_READY 0
+#define SAIL_CHANNEL_STATUS_PROCESSING 1
+
+#define SAIL_COMMAND_EQUALS(c, s) strcmp (c.verb, s) == 0
 
 extern sail_connection_t serverconn;
 extern sail_collection_t clientchans;
@@ -56,9 +63,13 @@ void sail_pool_notify (sail_pool_t *);
 void sail_pool_winddown (sail_pool_t *);
 int sail_pool_deinit (sail_pool_t *);
 
+int sail_command_parse (sail_channel_t *);
+int sail_command_reset (sail_command_t *);
+
 void sail_init ();
 void sail_deinit ();
 void sail_terminate_channel (sail_channel_t *);
+int sail_reply (sail_channel_t *, int, char *);
 void *sail_greet_routine (void *);
 void *sail_proc_routine (void *);
 
